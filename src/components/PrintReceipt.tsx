@@ -55,11 +55,13 @@ export default function PrintReceipt({ type, data, onClose }: PrintReceiptProps)
         </div>
 
         <div className="p-8 print:p-12" id="receipt-content">
-          <div className="mb-8 text-center">
-            <h1 className="text-3xl font-bold text-gray-800 mb-2">Seule La Grâce</h1>
-            <p className="text-sm text-gray-600">Gestion de Stock et Livraisons</p>
-            <p className="text-xs text-gray-500 mt-1">Contact: +243 XXX XXX XXX</p>
+          <div className="flex flex-col items-center mb-8">
+            <img src="/LOGO.jpg" alt="Logo" className="h-24 w-24 rounded-xl object-cover mb-4 shadow-md" />
+            <h1 className="text-2xl font-bold text-gray-800">Seule La Grâce</h1>
+            <p className="text-sm text-gray-500 mt-1">Système de Gestion de Stock</p>
+             <p className="text-xs text-gray-500 mt-1">Contact: +243 815 969 334 </p>
           </div>
+         
 
           <div className="mb-6 p-4 bg-gray-50 rounded-lg">
             <h2 className="text-xl font-bold text-gray-800 mb-3">
