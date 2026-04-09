@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import { LotProduit, Produit, Profile, Fournisseur } from '../types';
 import { Package, Plus, X, Calendar, AlertTriangle, TrendingUp } from 'lucide-react';
 
+
 interface StockLotsModuleProps {
   profile: Profile;
 }
@@ -48,70 +49,119 @@ export default function StockLotsModule({ profile }: StockLotsModuleProps) {
     }
   };
 
+  const [editingLot, setEditingLot] = useState<LotProduit | null>(null);
+
+  const handleEdit = (lot: LotProduit) => {
+    setEditingLot(lot);
+    setFormData({
+      produit_id: lot.produit_id,
+      fournisseur_id: lot.fournisseur_id || '',
+      numero_lot: lot.numero_lot,
+      quantite_initiale: lot.quantite_initiale,
+      prix_achat_unitaire: lot.prix_achat_unitaire,
+      date_fabrication: lot.date_fabrication || '',
+      date_expiration: lot.date_expiration || '',
+    });
+    setShowForm(true);
+  };
+
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.produit_id) {
-      alert('Veuillez sélectionner un produit');
-      return;
-    }
-
     try {
-      const { data: produit } = await supabase
-        .from('produits')
-        .select('stock_actuel')
-        .eq('id', formData.produit_id)
-        .single();
+      if (editingLot) {
+        // ✏️ MODE MODIFICATION
+        const { error } = await supabase
+          .from('lots_produits')
+          .update({
+            produit_id: formData.produit_id,
+            fournisseur_id: formData.fournisseur_id || null,
+            numero_lot: formData.numero_lot,
+            quantite_initiale: formData.quantite_initiale,
+            prix_achat_unitaire: formData.prix_achat_unitaire,
+            date_fabrication: formData.date_fabrication || null,
+            date_expiration: formData.date_expiration || null,
+          })
+          .eq('id', editingLot.id);
 
-      if (!produit) {
-        alert('Produit introuvable');
-        return;
-      }
+        if (error) throw error;
 
-      const nouvelleQuantite = produit.stock_actuel + formData.quantite_initiale;
+        alert("Lot modifié !");
+      } else {
+        // ➕ MODE CREATION (ton code actuel)
+        const { data: produit } = await supabase
+          .from('produits')
+          .select('stock_actuel')
+          .eq('id', formData.produit_id)
+          .single();
 
-      const { error: lotError } = await supabase.from('lots_produits').insert([
-        {
-          produit_id: formData.produit_id,
-          fournisseur_id: formData.fournisseur_id || null,
-          numero_lot: formData.numero_lot,
-          quantite_initiale: formData.quantite_initiale,
-          quantite_restante: formData.quantite_initiale,
-          prix_achat_unitaire: formData.prix_achat_unitaire,
-          date_fabrication: formData.date_fabrication || null,
-          date_expiration: formData.date_expiration || null,
-          statut: 'BON',
-        },
-      ]);
+        if (!produit) return;
 
-      if (lotError) throw lotError;
+        const nouvelleQuantite = produit.stock_actuel + formData.quantite_initiale;
 
-      await supabase
-        .from('mouvements_stock')
-        .insert([
+        await supabase.from('lots_produits').insert([
           {
             produit_id: formData.produit_id,
-            type_mouvement: 'ENTREE',
-            quantite: formData.quantite_initiale,
-            stock_avant: produit.stock_actuel,
-            stock_apres: nouvelleQuantite,
-            reference: formData.numero_lot,
-            motif: 'Nouveau lot reçu',
-            user_id: profile.id,
+            fournisseur_id: formData.fournisseur_id || null,
+            numero_lot: formData.numero_lot,
+            quantite_initiale: formData.quantite_initiale,
+            quantite_restante: formData.quantite_initiale,
+            prix_achat_unitaire: formData.prix_achat_unitaire,
+            date_fabrication: formData.date_fabrication || null,
+            date_expiration: formData.date_expiration || null,
+            statut: 'BON',
           },
         ]);
 
-      await supabase
-        .from('produits')
-        .update({ stock_actuel: nouvelleQuantite })
-        .eq('id', formData.produit_id);
+        await supabase
+          .from('produits')
+          .update({ stock_actuel: nouvelleQuantite })
+          .eq('id', formData.produit_id);
 
-      alert('Lot ajouté avec succès!');
+        alert("Lot ajouté !");
+      }
+
+      setEditingLot(null);
       setShowForm(false);
       resetForm();
       loadData();
     } catch (error: any) {
-      alert('Erreur: ' + error.message);
+      alert(error.message);
+    }
+  };
+
+  const handleDelete = async (lot: LotProduit) => {
+    if (!confirm("Supprimer ce lot ?")) return;
+
+    try {
+      // Mise à jour stock produit
+      const { data: produit } = await supabase
+        .from('produits')
+        .select('stock_actuel')
+        .eq('id', lot.produit_id)
+        .single();
+
+      if (!produit) return;
+
+      const nouveauStock = produit.stock_actuel - lot.quantite_restante;
+
+      if (nouveauStock < 0) {
+        alert("Stock invalide !");
+        return;
+      }
+
+      await supabase.from('lots_produits').delete().eq('id', lot.id);
+
+      await supabase
+        .from('produits')
+        .update({ stock_actuel: nouveauStock })
+        .eq('id', lot.produit_id);
+
+      alert("Lot supprimé !");
+      loadData();
+    } catch (error: any) {
+      alert(error.message);
     }
   };
 
@@ -221,7 +271,9 @@ export default function StockLotsModule({ profile }: StockLotsModuleProps) {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-gray-200 flex items-center justify-between">
-              <h2 className="text-xl font-bold text-gray-800">Nouveau Lot</h2>
+              <h2 className="text-xl font-bold text-gray-800">
+                {editingLot ? "Modifier le lot" : "Nouveau Lot"}
+              </h2>
               <button
                 onClick={() => {
                   setShowForm(false);
@@ -419,13 +471,12 @@ export default function StockLotsModule({ profile }: StockLotsModuleProps) {
                   </div>
                   <div className="w-full bg-gray-200 rounded-full h-2">
                     <div
-                      className={`h-2 rounded-full ${
-                        percentageRemaining > 50
+                      className={`h-2 rounded-full ${percentageRemaining > 50
                           ? 'bg-green-500'
                           : percentageRemaining > 25
-                          ? 'bg-orange-500'
-                          : 'bg-red-500'
-                      }`}
+                            ? 'bg-orange-500'
+                            : 'bg-red-500'
+                        }`}
                       style={{ width: `${percentageRemaining}%` }}
                     ></div>
                   </div>
@@ -445,13 +496,12 @@ export default function StockLotsModule({ profile }: StockLotsModuleProps) {
                     <span className="text-gray-600">Expiration</span>
                     <div className="text-right">
                       <span
-                        className={`font-medium ${
-                          lot.statut === 'EXPIRE'
+                        className={`font-medium ${lot.statut === 'EXPIRE'
                             ? 'text-red-600'
                             : lot.statut === 'PROCHE_EXPIRATION'
-                            ? 'text-orange-600'
-                            : 'text-gray-800'
-                        }`}
+                              ? 'text-orange-600'
+                              : 'text-gray-800'
+                          }`}
                       >
                         {new Date(lot.date_expiration).toLocaleDateString('fr-FR')}
                       </span>
@@ -469,6 +519,21 @@ export default function StockLotsModule({ profile }: StockLotsModuleProps) {
                     </div>
                   </div>
                 )}
+              </div>
+              <div className="flex space-x-2 mt-4">
+                <button
+                  onClick={() => handleEdit(lot)}
+                  className="flex-1 bg-blue-600 text-white py-1 rounded-lg hover:bg-blue-700 text-sm"
+                >
+                  Modifier
+                </button>
+
+                <button
+                  onClick={() => handleDelete(lot)}
+                  className="flex-1 bg-red-600 text-white py-1 rounded-lg hover:bg-red-700 text-sm"
+                >
+                  Supprimer
+                </button>
               </div>
             </div>
           );

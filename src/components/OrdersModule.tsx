@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Commande, Client, Livreur, Profile, Produit, CommandeItem, Paiement } from '../types';
-import { Plus, Eye, DollarSign, Truck, CheckCircle, Clock, X, Trash2, ShoppingCart, CreditCard, Printer } from 'lucide-react';
+import { Plus, Eye, DollarSign, Pencil, Truck, CheckCircle, Clock, X, Trash2, ShoppingCart, CreditCard, Printer } from 'lucide-react';
 import PrintReceipt from './PrintReceipt';
 
 interface OrdersModuleProps {
@@ -252,6 +252,39 @@ export default function OrdersModule({ profile }: OrdersModuleProps) {
     setShowDetail(true);
   };
 
+  const handleEditCommande = (commande: Commande) => {
+    viewDetails(commande);
+  };
+
+  const handleDeleteCommande = async (commande: Commande) => {
+    if (!confirm("Supprimer cette commande ?")) return;
+
+    try {
+      // Supprimer les items liés
+      await supabase
+        .from('commande_items')
+        .delete()
+        .eq('commande_id', commande.id);
+
+      // Supprimer les paiements
+      await supabase
+        .from('paiements')
+        .delete()
+        .eq('commande_id', commande.id);
+
+      // Supprimer la commande
+      await supabase
+        .from('commandes')
+        .delete()
+        .eq('id', commande.id);
+
+      alert("Commande supprimée !");
+      loadData();
+    } catch (error: any) {
+      alert(error.message);
+    }
+  };
+
   const handlePrintCommande = (commande: Commande) => {
     const data = {
       numero: commande.numero_commande,
@@ -354,11 +387,10 @@ export default function OrdersModule({ profile }: OrdersModuleProps) {
           <button
             key={status}
             onClick={() => setFilter(status as any)}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-              filter === status
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${filter === status
                 ? 'bg-blue-600 text-white'
                 : 'bg-white text-gray-600 hover:bg-gray-50'
-            }`}
+              }`}
           >
             {status === 'all' ? 'Toutes' : status.replace('_', ' ')}
           </button>
@@ -730,12 +762,34 @@ export default function OrdersModule({ profile }: OrdersModuleProps) {
                 )}
               </div>
 
-              <button
-                onClick={() => viewDetails(commande)}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <Eye size={20} className="text-gray-600" />
-              </button>
+              <div className="flex items-center space-x-2">
+                {/* Voir */}
+                <button
+                  onClick={() => viewDetails(commande)}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition"
+                  title="Voir"
+                >
+                  <Eye size={18} className="text-gray-600" />
+                </button>
+
+                {/* Modifier */}
+                <button
+                  onClick={() => handleEditCommande(commande)}
+                  className="p-2 hover:bg-blue-100 rounded-lg transition"
+                  title="Modifier"
+                >
+                  <Pencil size={18} className="text-blue-600" />
+                </button>
+
+                {/* Supprimer */}
+                <button
+                  onClick={() => handleDeleteCommande(commande)}
+                  className="p-2 hover:bg-red-100 rounded-lg transition"
+                  title="Supprimer"
+                >
+                  <Trash2 size={18} className="text-red-600" />
+                </button>
+              </div>
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

@@ -97,9 +97,9 @@ function App() {
     { id: 'stock', name: 'Stock & Lots', icon: Warehouse, roles: ['ADMIN', 'MAGASINIER'] },
     { id: 'suppliers', name: 'Fournisseurs', icon: Truck, roles: ['ADMIN', 'MAGASINIER'] },
     { id: 'clients', name: 'Clients (Hôtels)', icon: Users, roles: ['ADMIN', 'MAGASINIER', 'CAISSIER'] },
-    { id: 'orders', name: 'Commandes', icon: ShoppingCart, roles: ['ADMIN', 'MAGASINIER', 'CAISSIER'] },
+    { id: 'orders', name: 'Commandes', icon: ShoppingCart, roles: ['ADMIN', 'CAISSIER'] },
     { id: 'deliveries', name: 'Livraisons', icon: TrendingUp, roles: ['ADMIN', 'MAGASINIER', 'LIVREUR'] },
-    { id: 'reports', name: 'Rapports', icon: BarChart3, roles: ['ADMIN', 'MAGASINIER', 'CAISSIER'] },
+    { id: 'reports', name: 'Rapports', icon: BarChart3, roles: ['ADMIN', 'CAISSIER'] },
   ];
 
   const filteredModules = modules.filter(module =>
