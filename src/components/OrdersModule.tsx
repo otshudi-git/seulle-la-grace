@@ -257,22 +257,28 @@ export default function OrdersModule({ profile }: OrdersModuleProps) {
   };
 
   const handleDeleteCommande = async (commande: Commande) => {
+    // ❌ Blocage si livrée ou payée
+    if (
+      commande.statut_livraison === 'LIVREE' ||
+      commande.statut_paiement === 'PAYE'
+    ) {
+      alert("Impossible de supprimer une commande livrée ou payée !");
+      return;
+    }
+
     if (!confirm("Supprimer cette commande ?")) return;
 
     try {
-      // Supprimer les items liés
       await supabase
         .from('commande_items')
         .delete()
         .eq('commande_id', commande.id);
 
-      // Supprimer les paiements
       await supabase
         .from('paiements')
         .delete()
         .eq('commande_id', commande.id);
 
-      // Supprimer la commande
       await supabase
         .from('commandes')
         .delete()
@@ -388,8 +394,8 @@ export default function OrdersModule({ profile }: OrdersModuleProps) {
             key={status}
             onClick={() => setFilter(status as any)}
             className={`px-4 py-2 rounded-lg font-medium transition-colors ${filter === status
-                ? 'bg-blue-600 text-white'
-                : 'bg-white text-gray-600 hover:bg-gray-50'
+              ? 'bg-blue-600 text-white'
+              : 'bg-white text-gray-600 hover:bg-gray-50'
               }`}
           >
             {status === 'all' ? 'Toutes' : status.replace('_', ' ')}
@@ -784,10 +790,18 @@ export default function OrdersModule({ profile }: OrdersModuleProps) {
                 {/* Supprimer */}
                 <button
                   onClick={() => handleDeleteCommande(commande)}
-                  className="p-2 hover:bg-red-100 rounded-lg transition"
+                  disabled={
+                    commande.statut_livraison === 'LIVREE' ||
+                    commande.statut_paiement === 'PAYE'
+                  }
+                  className={`p-2 rounded-lg transition ${commande.statut_livraison === 'LIVREE' ||
+                      commande.statut_paiement === 'PAYE'
+                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                      : 'hover:bg-red-100 text-red-600'
+                    }`}
                   title="Supprimer"
                 >
-                  <Trash2 size={18} className="text-red-600" />
+                  <Trash2 size={18} />
                 </button>
               </div>
             </div>
