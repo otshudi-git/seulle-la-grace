@@ -4,6 +4,7 @@ import { Commande, Client, Livreur, Profile, Produit, CommandeItem, Paiement } f
 import { Plus, Eye, DollarSign, Pencil, Truck, CheckCircle, Clock, X, Trash2, ShoppingCart, CreditCard, Printer } from 'lucide-react';
 import PrintReceipt from './PrintReceipt';
 
+
 interface OrdersModuleProps {
   profile: Profile;
 }
@@ -52,7 +53,12 @@ export default function OrdersModule({ profile }: OrdersModuleProps) {
           .order('created_at', { ascending: false }),
         supabase.from('clients').select('*').eq('actif', true),
         supabase.from('livreurs').select('*').eq('actif', true),
-        supabase.from('produits').select('*').eq('actif', true).order('nom'),
+        supabase
+          .from('produits')
+          .select('*')
+          .eq('actif', true)
+          .gt('stock_actuel', 0) // 🔥 filtre ici
+          .order('nom'),
       ]);
 
       if (commandesRes.data) setCommandes(commandesRes.data);
@@ -252,8 +258,66 @@ export default function OrdersModule({ profile }: OrdersModuleProps) {
     setShowDetail(true);
   };
 
-  const handleEditCommande = (commande: Commande) => {
-    viewDetails(commande);
+  const handleUpdateQuantite = async (item: CommandeItem, newQuantite: number) => {
+    if (!selectedCommande) return;
+
+    try {
+      const difference = newQuantite - item.quantite;
+
+      // 🔁 Mettre à jour le stock produit
+      const { data: produit } = await supabase
+        .from('produits')
+        .select('stock_actuel')
+        .eq('id', item.produit_id)
+        .single();
+
+      if (!produit) return;
+
+      const nouveauStock = produit.stock_actuel - difference;
+
+      if (nouveauStock < 0) {
+        alert("Stock insuffisant !");
+        return;
+      }
+
+      await supabase
+        .from('produits')
+        .update({ stock_actuel: nouveauStock })
+        .eq('id', item.produit_id);
+
+      // 🧾 Mettre à jour l’item
+      const nouveauMontant = newQuantite * item.prix_unitaire;
+
+      await supabase
+        .from('commande_items')
+        .update({
+          quantite: newQuantite,
+          montant: nouveauMontant,
+        })
+        .eq('id', item.id);
+
+      // 🔄 Recalculer total commande
+      const nouveauxItems = commandeItems.map(i =>
+        i.id === item.id ? { ...i, quantite: newQuantite, montant: nouveauMontant } : i
+      );
+
+      const nouveauTotal = nouveauxItems.reduce((sum, i) => sum + i.montant, 0);
+
+      await supabase
+        .from('commandes')
+        .update({
+          montant_total: nouveauTotal,
+          montant_restant: nouveauTotal - selectedCommande.montant_paye,
+        })
+        .eq('id', selectedCommande.id);
+
+      alert("Quantité mise à jour !");
+      loadCommandeDetails(selectedCommande.id);
+      loadData();
+
+    } catch (error: any) {
+      alert(error.message);
+    }
   };
 
   const handleDeleteCommande = async (commande: Commande) => {
@@ -360,6 +424,8 @@ export default function OrdersModule({ profile }: OrdersModuleProps) {
     }
   };
 
+  const [quantitesModifiees, setQuantitesModifiees] = useState<{ [key: string]: number }>({});
+
   const filteredCommandes = commandes.filter((c) =>
     filter === 'all' || c.statut_livraison === filter
   );
@@ -453,16 +519,21 @@ export default function OrdersModule({ profile }: OrdersModuleProps) {
                         className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                       >
                         <option value="">Sélectionner un produit</option>
-                        {produits.map((produit) => (
-                          <option key={produit.id} value={produit.id}>
-                            {produit.nom} ({produit.stock_actuel} {produit.unite_mesure} disponible)
-                          </option>
-                        ))}
+                        {produits
+                          .filter((produit) => produit.stock_actuel > 0)
+                          .map((produit) => (
+                            <option key={produit.id} value={produit.id}>
+                              {produit.nom} ({produit.stock_actuel} {produit.unite_mesure} disponible)
+                            </option>
+                          ))}
                       </select>
 
                       <input
                         type="number"
                         step="0.01"
+                        max={
+                          produits.find(p => p.id === item.produit_id)?.stock_actuel || 1
+                        }
                         value={item.quantite}
                         onChange={(e) => handleUpdateCartItem(index, 'quantite', parseFloat(e.target.value) || 0)}
                         placeholder="Qté"
@@ -566,7 +637,30 @@ export default function OrdersModule({ profile }: OrdersModuleProps) {
                       <div className="flex-1">
                         <p className="font-medium text-gray-800">{item.produit?.nom}</p>
                         <p className="text-sm text-gray-600">
-                          {item.quantite} × {item.prix_unitaire.toLocaleString()} USD
+                          <input
+                            type="number"
+                            min="1"
+                            value={quantitesModifiees[item.id] ?? item.quantite}
+                            onChange={(e) =>
+                              setQuantitesModifiees({
+                                ...quantitesModifiees,
+                                [item.id]: parseFloat(e.target.value) || 0,
+                              })
+                            }
+                            className="w-20 px-2 py-1 border border-gray-300 rounded"
+                          /> <button
+                            onClick={() =>
+                              handleUpdateQuantite(
+                                item,
+                                quantitesModifiees[item.id] ?? item.quantite
+                              )
+                            }
+                            className="ml-2 px-2 py-1 bg-green-600 text-white rounded hover:bg-green-700"
+                            title="Valider"
+                          >
+                            ✔
+                          </button>
+                          × {item.prix_unitaire.toLocaleString()} USD
                         </p>
                       </div>
                       <p className="font-bold text-gray-800">{item.montant.toLocaleString()} USD</p>
@@ -778,7 +872,7 @@ export default function OrdersModule({ profile }: OrdersModuleProps) {
                   <Eye size={18} className="text-gray-600" />
                 </button>
 
-                {/* Modifier */}
+                {/* Modifier }
                 <button
                   onClick={() => handleEditCommande(commande)}
                   className="p-2 hover:bg-blue-100 rounded-lg transition"
@@ -795,9 +889,9 @@ export default function OrdersModule({ profile }: OrdersModuleProps) {
                     commande.statut_paiement === 'PAYE'
                   }
                   className={`p-2 rounded-lg transition ${commande.statut_livraison === 'LIVREE' ||
-                      commande.statut_paiement === 'PAYE'
-                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                      : 'hover:bg-red-100 text-red-600'
+                    commande.statut_paiement === 'PAYE'
+                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    : 'hover:bg-red-100 text-red-600'
                     }`}
                   title="Supprimer"
                 >
